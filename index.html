@@ -1,0 +1,704 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Ozaterra - CRM Agriculteurs Partenaires</title>
+    
+    <!-- Tailwind CSS -->
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            theme: {
+                extend: {
+                    colors: {
+                        'oza-green': '#2C5E3B',       
+                        'oza-green-light': '#458B59', 
+                        'oza-terra': '#D46F4D',       
+                        'oza-terra-light': '#E28C6F',
+                        'oza-sand': '#FCFAF8',        
+                    },
+                    fontFamily: {
+                        sans: ['Inter', 'sans-serif'],
+                        display: ['Poppins', 'sans-serif'],
+                    }
+                }
+            }
+        }
+    </script>
+    
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Poppins:wght@500;600;700&display=swap" rel="stylesheet">
+    
+    <!-- Cartographie Leaflet -->
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+    <!-- FontAwesome -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    
+    <!-- FIREBASE (Compatibilité simplifiée) -->
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-firestore-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/10.4.0/firebase-auth-compat.js"></script>
+</head>
+<body class="bg-oza-sand text-slate-800 font-sans min-h-screen flex flex-col selection:bg-oza-green selection:text-white">
+
+    <!-- ÉCRAN DE CONNEXION -->
+    <div id="login-screen" class="fixed inset-0 bg-oza-sand z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-[0_8px_30px_rgb(0,0,0,0.08)] max-w-md w-full p-10 border border-slate-100">
+            <div class="text-center mb-10">
+                <div class="inline-flex items-center justify-center w-16 h-16 rounded-full bg-oza-green/10 mb-4">
+                    <i class="fa-solid fa-leaf text-3xl text-oza-green"></i>
+                </div>
+                <h2 class="text-3xl font-display font-bold text-slate-900 tracking-tight">Ozaterra</h2>
+                <p class="text-slate-500 text-sm mt-2 font-medium">Espace Partenaires & Réservations</p>
+            </div>
+            
+            <form id="login-form" onsubmit="loginUser(event)" class="space-y-5">
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">Identifiant (E-mail)</label>
+                    <input type="email" id="login-email" required class="w-full rounded-xl border border-slate-200 px-4 py-3 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none">
+                </div>
+                <div>
+                    <label class="block text-sm font-semibold text-slate-700 mb-1.5">Mot de passe</label>
+                    <input type="password" id="login-password" required class="w-full rounded-xl border border-slate-200 px-4 py-3 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none">
+                </div>
+                <div id="login-error" class="text-red-500 text-sm font-medium bg-red-50 p-3 rounded-lg hidden border border-red-100"></div>
+                
+                <button type="submit" id="login-btn" class="w-full bg-oza-green hover:bg-oza-green-light text-white font-semibold px-4 py-3.5 rounded-xl shadow-md shadow-oza-green/20 transition-all mt-6 text-[15px]">
+                    Se connecter à l'espace
+                </button>
+            </form>
+        </div>
+    </div>
+
+    <!-- APP CRM -->
+    <div id="app-container" class="hidden flex-col min-h-screen">
+        <header class="bg-white border-b border-slate-200 sticky top-0 z-40">
+            <div class="max-w-7xl mx-auto px-4 sm:px-6 h-20 flex justify-between items-center">
+                <div class="flex items-center space-x-3">
+                    <i class="fa-solid fa-leaf text-2xl text-oza-green"></i>
+                    <h1 class="text-2xl font-display font-bold text-slate-900 tracking-tight">Ozaterra <span class="font-normal text-slate-400 text-xl ml-1">CRM</span></h1>
+                </div>
+                <div class="flex items-center space-x-4 bg-slate-50 px-4 py-2 rounded-full border border-slate-100">
+                    <div class="w-2 h-2 rounded-full bg-oza-green animate-pulse"></div>
+                    <p class="text-slate-600 text-sm font-medium">Équipe connectée</p>
+                    <div class="w-px h-4 bg-slate-300 mx-2"></div>
+                    <button onclick="logoutUser()" class="text-slate-400 hover:text-oza-terra transition" title="Se déconnecter">
+                        <i class="fa-solid fa-arrow-right-from-bracket text-lg"></i>
+                    </button>
+                </div>
+            </div>
+        </header>
+
+        <nav class="bg-white border-b border-slate-200 shadow-sm relative z-30">
+            <div class="max-w-7xl mx-auto flex space-x-8 px-4 sm:px-6">
+                <button onclick="switchTab('form')" id="btn-form" class="tab-btn py-4 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2 border-oza-green text-oza-green transition-colors">
+                    <i class="fa-solid fa-user-plus"></i>
+                    <span>Ajouter un partenaire</span>
+                </button>
+                <button onclick="switchTab('directory')" id="btn-directory" class="tab-btn py-4 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors">
+                    <i class="fa-solid fa-address-book"></i>
+                    <span>Répertoire (<span id="counter-badge">0</span>)</span>
+                </button>
+                <button onclick="switchTab('stats')" id="btn-stats" class="tab-btn py-4 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors">
+                    <i class="fa-solid fa-chart-pie"></i>
+                    <span>Carte & Analyses</span>
+                </button>
+            </div>
+        </nav>
+
+        <main class="flex-grow max-w-7xl w-full mx-auto p-4 sm:p-6 lg:p-8 relative z-10">
+            <!-- ONGLET 1 : FORMULAIRE -->
+            <section id="tab-form" class="tab-content">
+                <div class="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] border border-slate-100 p-6 sm:p-10 max-w-4xl mx-auto">
+                    <div class="mb-8 border-b border-slate-100 pb-5">
+                        <h2 class="text-2xl font-display font-bold text-slate-900">Nouvelle Fiche Agriculteur</h2>
+                        <p class="text-sm text-slate-500 mt-1">Saisissez les détails de l'exploitation pour l'ajouter au réseau Ozaterra.</p>
+                    </div>
+
+                    <form id="partner-form" onsubmit="savePartner(event)" class="space-y-8">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Nom de l'exploitation *</label>
+                                <input type="text" id="farm-name" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Numéro de téléphone *</label>
+                                <input type="tel" id="operator-phone" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none" placeholder="Ex : 06 12 34 56 78">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Nom de l'exploitant *</label>
+                                <input type="text" id="operator-lastname" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Prénom de l'exploitant *</label>
+                                <input type="text" id="operator-firstname" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none">
+                            </div>
+                        </div>
+
+                        <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Ville de l'exploitant *</label>
+                                <input type="text" id="operator-city" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none">
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Région *</label>
+                                <select id="region-select" onchange="updateDepartments()" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none bg-white">
+                                    <option value="">Sélectionnez une région</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Département *</label>
+                                <select id="department-select" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none bg-white">
+                                    <option value="">Sélectionnez la région d'abord</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <hr class="border-slate-100">
+
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-3">Prestations touristiques & Accueil</label>
+                            <div class="flex flex-wrap gap-8 bg-oza-sand p-5 rounded-xl border border-slate-100">
+                                <label class="flex items-center space-x-3 cursor-pointer group">
+                                    <input type="checkbox" id="has-nights" class="w-5 h-5 text-oza-terra rounded border-slate-300 focus:ring-oza-terra">
+                                    <span class="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition">Hébergement / Nuitées</span>
+                                </label>
+                                <label class="flex items-center space-x-3 cursor-pointer group">
+                                    <input type="checkbox" id="has-activities" class="w-5 h-5 text-oza-terra rounded border-slate-300 focus:ring-oza-terra">
+                                    <span class="text-sm font-medium text-slate-700 group-hover:text-slate-900 transition">Activités / Expériences immersives</span>
+                                </label>
+                            </div>
+                        </div>
+
+                        <div>
+                            <label class="block text-sm font-semibold text-slate-700 mb-3">Animaux présents sur l'exploitation</label>
+                            <div id="animals-container" class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-4 gap-4 bg-white p-5 rounded-xl border border-slate-200 max-h-64 overflow-y-auto shadow-inner shadow-slate-50"></div>
+                        </div>
+
+                        <hr class="border-slate-100">
+
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Type d'agriculture principal *</label>
+                                <select id="agri-type-1" required class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none bg-white">
+                                    <option value="">Sélectionnez un type</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label class="block text-sm font-semibold text-slate-700 mb-1.5">Type d'agriculture secondaire</label>
+                                <div class="flex gap-2">
+                                    <select id="agri-type-2" class="w-full rounded-xl border border-slate-200 px-3 py-2.5 focus:ring-2 focus:ring-oza-green focus:border-oza-green transition outline-none bg-white">
+                                        <option value="">Aucun</option>
+                                    </select>
+                                    <button type="button" onclick="addNewAgriType()" class="bg-slate-100 hover:bg-slate-200 text-slate-600 px-4 rounded-xl transition border border-slate-200">
+                                        <i class="fa-solid fa-plus"></i>
+                                    </button>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="pt-6 flex justify-end">
+                            <button type="submit" id="btn-submit-form" class="bg-oza-green hover:bg-oza-green-light text-white font-semibold px-8 py-3 rounded-xl shadow-md shadow-oza-green/20 transition-all flex items-center space-x-2">
+                                <i class="fa-solid fa-check"></i>
+                                <span>Ajouter au répertoire</span>
+                            </button>
+                        </div>
+                    </form>
+                </div>
+            </section>
+
+            <!-- ONGLET 2 : RÉPERTOIRE -->
+            <section id="tab-directory" class="tab-content hidden">
+                <div class="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] border border-slate-100 p-6 sm:p-8">
+                    <div class="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-6 pb-5 border-b border-slate-100 gap-4">
+                        <div>
+                            <h2 class="text-2xl font-display font-bold text-slate-900">Répertoire Ozaterra</h2>
+                            <p class="text-sm text-slate-500 mt-1">Gestion des hôtes et agriculteurs partenaires.</p>
+                        </div>
+                        <div class="flex flex-wrap items-center gap-3 w-full sm:w-auto">
+                            <div class="relative w-full sm:w-64">
+                                <i class="fa-solid fa-magnifying-glass absolute left-3 top-2.5 text-slate-400 text-sm"></i>
+                                <input type="text" id="search-input" onkeyup="filterPartners()" placeholder="Rechercher..." class="border border-slate-200 rounded-xl pl-9 pr-3 py-2 text-sm focus:ring-2 focus:ring-oza-green focus:border-oza-green outline-none w-full bg-slate-50 focus:bg-white transition">
+                            </div>
+                            <button onclick="exportToCSV()" class="bg-white border border-slate-200 hover:border-oza-green hover:text-oza-green text-slate-700 text-sm font-semibold px-4 py-2 rounded-xl transition-colors flex items-center space-x-2">
+                                <i class="fa-solid fa-download"></i>
+                                <span>Export CSV</span>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left border-collapse">
+                            <thead>
+                                <tr class="bg-slate-50 text-slate-500 text-[11px] font-bold uppercase tracking-wider">
+                                    <th class="p-4 rounded-tl-xl">Exploitation</th>
+                                    <th class="p-4">Exploitant & Contact</th>
+                                    <th class="p-4">Localisation</th>
+                                    <th class="p-4">Offres</th>
+                                    <th class="p-4">Catégorie</th>
+                                    <th class="p-4 rounded-tr-xl text-center">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="partners-table-body" class="divide-y divide-slate-100 text-sm text-slate-700"></tbody>
+                        </table>
+                        <div id="empty-state" class="text-center py-16 text-slate-400 hidden">
+                            <i class="fa-solid fa-seedling text-5xl mb-4 text-slate-200"></i>
+                            <p class="font-medium text-slate-500">Aucun agriculteur partenaire pour le moment.</p>
+                        </div>
+                    </div>
+                </div>
+            </section>
+
+            <!-- ONGLET 3 : CARTE ET STATISTIQUES -->
+            <section id="tab-stats" class="tab-content hidden">
+                <div class="grid grid-cols-1 gap-6">
+                    <div class="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] border border-slate-100 p-6 flex flex-col items-center relative">
+                        <div class="w-full flex flex-col md:flex-row justify-between items-start md:items-center mb-6 gap-4 border-b border-slate-100 pb-4">
+                            <h3 class="text-sm font-display font-bold text-slate-800 uppercase tracking-wider whitespace-nowrap">
+                                <i class="fa-solid fa-map-location-dot mr-2 text-oza-terra"></i> Carte & Filtres
+                            </h3>
+                            <div class="flex flex-wrap items-center gap-3 w-full md:w-auto">
+                                <select id="map-filter-agri" onchange="updateStats()" class="border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-oza-green focus:border-oza-green outline-none bg-slate-50 shadow-sm transition w-full md:w-auto">
+                                    <option value="ALL">🚜 Toutes les agricultures</option>
+                                </select>
+                                <select id="map-filter-animal" onchange="updateStats()" class="border border-slate-200 text-slate-700 rounded-xl px-3 py-2 text-sm font-medium focus:ring-2 focus:ring-oza-green focus:border-oza-green outline-none bg-slate-50 shadow-sm transition w-full md:w-auto">
+                                    <option value="ALL">🐄 Tous les animaux</option>
+                                </select>
+                            </div>
+                        </div>
+                        <div id="map-france" class="w-full h-[450px] rounded-xl border border-slate-200 z-0 relative"></div>
+                    </div>
+
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                        <div class="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] border border-slate-100 p-6 flex flex-col items-center">
+                            <h3 class="text-sm font-display font-bold text-slate-800 mb-6 self-start uppercase tracking-wider">Filières Agricoles</h3>
+                            <div class="w-full h-64 flex justify-center items-center"><canvas id="chartAgri"></canvas></div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] border border-slate-100 p-6 flex flex-col items-center">
+                            <h3 class="text-sm font-display font-bold text-slate-800 mb-6 self-start uppercase tracking-wider">Offres Proposées</h3>
+                            <div class="w-full h-64 flex justify-center items-center"><canvas id="chartServices"></canvas></div>
+                        </div>
+                        <div class="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] border border-slate-100 p-6 flex flex-col items-center">
+                            <h3 class="text-sm font-display font-bold text-slate-800 mb-6 self-start uppercase tracking-wider">Top Animaux</h3>
+                            <div class="w-full h-64 flex justify-center items-center"><canvas id="chartAnimals"></canvas></div>
+                        </div>
+                    </div>
+                </div>
+            </section>
+        </main>
+    </div>
+
+    <!-- Modal Détails -->
+    <div id="detail-modal" class="fixed inset-0 bg-slate-900/40 backdrop-blur-sm hidden z-50 flex items-center justify-center p-4">
+        <div class="bg-white rounded-2xl shadow-2xl max-w-2xl w-full p-8 relative border border-slate-100">
+            <button onclick="closeModal()" class="absolute top-5 right-5 text-slate-400 hover:text-slate-700 bg-slate-100 hover:bg-slate-200 rounded-full w-8 h-8 flex items-center justify-center transition">
+                <i class="fa-solid fa-xmark"></i>
+            </button>
+            <div class="flex items-center space-x-3 mb-6 border-b border-slate-100 pb-4">
+                <i class="fa-solid fa-house-chimney text-oza-terra text-xl"></i>
+                <h3 class="text-xl font-display font-bold text-slate-900" id="modal-title">Détails de l'hôte</h3>
+            </div>
+            <div id="modal-content" class="space-y-4 text-sm text-slate-700"></div>
+        </div>
+    </div>
+
+    <script>
+        const firebaseConfig = {
+          apiKey: "AIzaSyDxFN9nOiVgpG30RXHgTMMfsE2x1vaCRWM",
+          authDomain: "ozaterra.firebaseapp.com",
+          projectId: "ozaterra",
+          storageBucket: "ozaterra.firebasestorage.app",
+          messagingSenderId: "172392367510",
+          appId: "1:172392367510:web:c8c37fd0f70c092fdb09b7"
+        };
+
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.firestore();
+        const auth = firebase.auth();
+
+        let partners = [];
+        let chartsInstance = {};
+        let mapInstance = null;
+        let markersLayer = null;
+        const cityCache = {}; 
+
+        const regionsData = {
+            "Auvergne-Rhône-Alpes": ["Ain", "Allier", "Ardèche", "Cantal", "Drôme", "Isère", "Loire", "Haute-Loire", "Puy-de-Dôme", "Rhône", "Savoie", "Haute-Savoie"],
+            "Bourgogne-Franche-Comté": ["Côte-d'Or", "Doubs", "Jura", "Nièvre", "Haute-Saône", "Saône-et-Loire", "Yonne", "Territoire de Belfort"],
+            "Bretagne": ["Côtes-d'Armor", "Finistère", "Ille-et-Vilaine", "Morbihan"],
+            "Centre-Val de Loire": ["Cher", "Eure-et-Loir", "Indre", "Indre-et-Loire", "Loir-et-Cher", "Loiret"],
+            "Corse": ["Corse-du-Sud", "Haute-Corse"],
+            "Grand Est": ["Ardennes", "Aube", "Marne", "Haute-Marne", "Meurthe-et-Moselle", "Meuse", "Moselle", "Bas-Rhin", "Haut-Rhin", "Vosges"],
+            "Hauts-de-France": ["Nord", "Pas-de-Calais", "Oise", "Somme", "Aisne"],
+            "Île-de-France": ["Paris", "Seine-et-Marne", "Yvelines", "Essonne", "Hauts-de-Seine", "Seine-Saint-Denis", "Val-de-Marne", "Val-d'Oise"],
+            "Normandie": ["Calvados", "Eure", "Manche", "Orne", "Seine-Maritime"],
+            "Nouvelle-Aquitaine": ["Charente", "Charente-Maritime", "Corrèze", "Creuse", "Dordogne", "Gironde", "Landes", "Lot-et-Garonne", "Pyrénées-Atlantiques", "Deux-Sèvres", "Vienne", "Haute-Vienne"],
+            "Occitanie": ["Ariège", "Aude", "Aveyron", "Gard", "Haute-Garonne", "Gers", "Lot", "Lozère", "Hautes-Pyrénées", "Pyrénées-Orientales", "Tarn", "Tarn-et-Garonne"],
+            "Pays de la Loire": ["Loire-Atlantique", "Maine-et-Loire", "Mayenne", "Sarthe", "Vendée"],
+            "Provence-Alpes-Côte d'Azur": ["Alpes-de-Haute-Provence", "Hautes-Alpes", "Alpes-Maritimes", "Bouches-du-Rhône", "Var", "Vaucluse"]
+        };
+
+        const farmAnimals = ["Vaches laitières", "Vaches allaitantes", "Veaux", "Taures / Bœufs", "Porcs / Cochons", "Truies", "Poulets de chair", "Poules pondeuses", "Dindes", "Canards", "Oies", "Pintades", "Brebis / Moutons", "Agneaux", "Chèvres", "Chevreaux", "Chevaux", "Poneys", "Ânes", "Mules / Bardots", "Lapins", "Caille", "Pigeons", "Abeilles (ruches)", "Truites", "Chiens", "Chats", "Lamas", "Alpagas", "Cerfs"];
+        let agriTypes = ["Élevage", "Ferme pédagogique", "Maraîchage", "Arboriculture", "Viticulture", "Céréaliculture", "Parc animalier", "Apiculture", "Sylviculture", "Horticulture", "Polyculture", "Agriculture Biologique"];
+
+        auth.onAuthStateChanged((user) => {
+            const loginScreen = document.getElementById('login-screen');
+            const appContainer = document.getElementById('app-container');
+            if (user) {
+                if(loginScreen) loginScreen.classList.add('hidden');
+                if(appContainer) {
+                    appContainer.classList.remove('hidden');
+                    appContainer.classList.add('flex');
+                }
+                initApp();
+                loadDataFromFirebase();
+            } else {
+                if(loginScreen) loginScreen.classList.remove('hidden');
+                if(appContainer) {
+                    appContainer.classList.add('hidden');
+                    appContainer.classList.remove('flex');
+                }
+            }
+        });
+
+        function loginUser(e) {
+            e.preventDefault();
+            const email = document.getElementById('login-email').value;
+            const pass = document.getElementById('login-password').value;
+            const errorDiv = document.getElementById('login-error');
+            const btn = document.getElementById('login-btn');
+            
+            errorDiv.classList.add('hidden');
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i> Connexion...';
+            btn.disabled = true;
+
+            auth.signInWithEmailAndPassword(email, pass)
+                .catch(err => {
+                    errorDiv.textContent = "Identifiants incorrects ou erreur réseau.";
+                    errorDiv.classList.remove('hidden');
+                    btn.innerHTML = "Se connecter à l'espace";
+                    btn.disabled = false;
+                });
+        }
+
+        function logoutUser() { auth.signOut(); }
+
+        function initApp() {
+            initRegions();
+            initAnimals();
+            initAgriTypes();
+        }
+
+        function switchTab(tabId) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('border-oza-green', 'text-oza-green');
+                el.classList.add('border-transparent', 'text-slate-500');
+            });
+            document.getElementById('tab-' + tabId).classList.remove('hidden');
+            const activeBtn = document.getElementById('btn-' + tabId);
+            activeBtn.classList.remove('border-transparent', 'text-slate-500');
+            activeBtn.classList.add('border-oza-green', 'text-oza-green');
+            if (tabId === 'stats') updateStats();
+        }
+
+        function initRegions() {
+            const select = document.getElementById('region-select');
+            select.innerHTML = '<option value="">Sélectionnez une région</option>';
+            for (let region in regionsData) select.innerHTML += `<option value="${region}">${region}</option>`;
+        }
+
+        function updateDepartments() {
+            const region = document.getElementById('region-select').value;
+            const deptSelect = document.getElementById('department-select');
+            deptSelect.innerHTML = '<option value="">Département</option>';
+            if (region && regionsData[region]) {
+                regionsData[region].forEach(dept => deptSelect.innerHTML += `<option value="${dept}">${dept}</option>`);
+            }
+        }
+
+        function initAnimals() {
+            const container = document.getElementById('animals-container');
+            const filterAnimal = document.getElementById('map-filter-animal');
+            container.innerHTML = '';
+            filterAnimal.innerHTML = '<option value="ALL">🐄 Tous les animaux</option>';
+            
+            farmAnimals.forEach((animal, index) => {
+                container.innerHTML += `
+                    <div class="flex items-center space-x-2">
+                        <input type="checkbox" id="animal_${index}" value="${animal}" class="animal-checkbox w-4 h-4 text-oza-green rounded border-slate-300 focus:ring-oza-green">
+                        <label for="animal_${index}" class="text-sm font-medium text-slate-600 cursor-pointer select-none">${animal}</label>
+                    </div>`;
+                filterAnimal.innerHTML += `<option value="${animal}">${animal}</option>`;
+            });
+        }
+
+        function initAgriTypes() {
+            const select1 = document.getElementById('agri-type-1');
+            const select2 = document.getElementById('agri-type-2');
+            const filterAgri = document.getElementById('map-filter-agri');
+            
+            select1.innerHTML = '<option value="">Sélectionnez un type</option>';
+            select2.innerHTML = '<option value="">Aucun</option>';
+            filterAgri.innerHTML = '<option value="ALL">🚜 Toutes les agricultures</option>';
+            
+            agriTypes.forEach(type => {
+                select1.innerHTML += `<option value="${type}">${type}</option>`;
+                select2.innerHTML += `<option value="${type}">${type}</option>`;
+                filterAgri.innerHTML += `<option value="${type}">${type}</option>`;
+            });
+        }
+
+        function addNewAgriType() {
+            const newType = prompt("Nouvelle catégorie agricole :");
+            if (newType && newType.trim() !== "" && !agriTypes.includes(newType.trim())) {
+                agriTypes.push(newType.trim());
+                initAgriTypes();
+                document.getElementById('agri-type-1').value = newType.trim();
+            }
+        }
+
+        function loadDataFromFirebase() {
+            db.collection("partners").orderBy("createdAt", "desc").onSnapshot((snapshot) => {
+                partners = [];
+                snapshot.forEach((doc) => { partners.push({ firebaseId: doc.id, ...doc.data() }); });
+                updateCounter();
+                renderTable();
+                if(!document.getElementById('tab-stats').classList.contains('hidden')) updateStats();
+            });
+        }
+
+        function savePartner(e) {
+            e.preventDefault();
+            const btn = document.getElementById('btn-submit-form');
+            const originalBtnHtml = btn.innerHTML;
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span> Localisation...</span>';
+            btn.disabled = true;
+
+            const city = document.getElementById('operator-city').value.trim();
+            const selectedAnimals = Array.from(document.querySelectorAll('.animal-checkbox:checked')).map(cb => cb.value);
+
+            fetch(`https://nominatim.openstreetmap.org/search?format=json&country=France&city=${encodeURIComponent(city)}`)
+                .then(response => response.json())
+                .then(data => {
+                    let lat = null, lng = null;
+                    if (data && data.length > 0) {
+                        lat = parseFloat(data[0].lat);
+                        lng = parseFloat(data[0].lon);
+                    }
+
+                    const partnerData = {
+                        farmName: document.getElementById('farm-name').value.trim(),
+                        phone: document.getElementById('operator-phone').value.trim(),
+                        operatorLastname: document.getElementById('operator-lastname').value.trim(),
+                        operatorFirstname: document.getElementById('operator-firstname').value.trim(),
+                        city: city,
+                        region: document.getElementById('region-select').value,
+                        department: document.getElementById('department-select').value,
+                        hasNights: document.getElementById('has-nights').checked,
+                        hasActivities: document.getElementById('has-activities').checked,
+                        animals: selectedAnimals,
+                        agriType1: document.getElementById('agri-type-1').value,
+                        agriType2: document.getElementById('agri-type-2').value || null,
+                        lat: lat, 
+                        lng: lng, 
+                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                    };
+
+                    return db.collection("partners").add(partnerData);
+                })
+                .then(() => {
+                    document.getElementById('partner-form').reset();
+                    document.getElementById('department-select').innerHTML = '<option value="">Département</option>';
+                    switchTab('directory');
+                })
+                .catch(error => alert("Erreur d'enregistrement : " + error.message))
+                .finally(() => {
+                    btn.innerHTML = originalBtnHtml;
+                    btn.disabled = false;
+                });
+        }
+
+        function deletePartner(firebaseId) {
+            if (confirm("Supprimer définitivement cet agriculteur du réseau ?")) {
+                db.collection("partners").doc(firebaseId).delete();
+            }
+        }
+
+        function updateCounter() { document.getElementById('counter-badge').textContent = partners.length; }
+
+        function renderTable(dataToRender = partners) {
+            const tbody = document.getElementById('partners-table-body');
+            const emptyState = document.getElementById('empty-state');
+            tbody.innerHTML = '';
+
+            if (dataToRender.length === 0) {
+                emptyState.classList.remove('hidden');
+            } else {
+                emptyState.classList.add('hidden');
+                dataToRender.forEach(p => {
+                    let services = [];
+                    if (p.hasNights) services.push('<span class="bg-amber-100 text-amber-800 text-[10px] uppercase font-bold px-2 py-1 rounded">Nuitées</span>');
+                    if (p.hasActivities) services.push('<span class="bg-sky-100 text-sky-800 text-[10px] uppercase font-bold px-2 py-1 rounded">Activités</span>');
+                    
+                    let agriStr = p.agriType1;
+                    if (p.agriType2) agriStr += ` <span class="text-slate-400">&</span> ${p.agriType2}`;
+                    let phoneDisplay = p.phone ? `<br><span class="text-xs text-slate-500 mt-1 block"><i class="fa-solid fa-phone text-slate-400 mr-1.5"></i>${p.phone}</span>` : '';
+
+                    tbody.innerHTML += `
+                        <tr class="hover:bg-oza-sand transition border-b border-slate-50 group">
+                            <td class="p-4 font-semibold text-slate-900">${p.farmName}</td>
+                            <td class="p-4 font-medium">${p.operatorFirstname} ${p.operatorLastname}${phoneDisplay}</td>
+                            <td class="p-4 text-slate-500">${p.city} <span class="text-xs">(${p.department})</span></td>
+                            <td class="p-4"><div class="flex flex-wrap gap-1.5">${services.length ? services.join('') : '-'}</div></td>
+                            <td class="p-4 text-xs font-medium text-slate-600">${agriStr}</td>
+                            <td class="p-4 text-center space-x-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                                <button onclick="viewDetails('${p.firebaseId}')" class="text-slate-400 hover:text-oza-green transition" title="Voir les détails"><i class="fa-solid fa-eye"></i></button>
+                                <button onclick="deletePartner('${p.firebaseId}')" class="text-slate-400 hover:text-red-500 transition" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
+                            </td>
+                        </tr>`;
+                });
+            }
+        }
+
+        function filterPartners() {
+            const query = document.getElementById('search-input').value.toLowerCase();
+            renderTable(partners.filter(p => 
+                p.farmName.toLowerCase().includes(query) || p.operatorLastname.toLowerCase().includes(query) || p.city.toLowerCase().includes(query) || (p.phone && p.phone.includes(query))
+            ));
+        }
+
+        function viewDetails(id) {
+            const p = partners.find(item => item.firebaseId === id);
+            if (!p) return;
+            document.getElementById('modal-title').textContent = p.farmName;
+            document.getElementById('modal-content').innerHTML = `
+                <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    <div class="bg-slate-50 p-3 rounded-lg"><span class="block text-xs text-slate-500 mb-1">Exploitant</span><strong class="text-slate-900">${p.operatorFirstname} ${p.operatorLastname}</strong></div>
+                    <div class="bg-slate-50 p-3 rounded-lg"><span class="block text-xs text-slate-500 mb-1">Téléphone de contact</span><strong class="text-slate-900">${p.phone ? p.phone : '<span class="text-slate-400 font-normal italic">Non renseigné</span>'}</strong></div>
+                    <div class="bg-slate-50 p-3 rounded-lg"><span class="block text-xs text-slate-500 mb-1">Localisation</span><strong class="text-slate-900">${p.city} (${p.department})</strong></div>
+                    <div class="bg-slate-50 p-3 rounded-lg"><span class="block text-xs text-slate-500 mb-1">Filières</span><strong class="text-slate-900">${p.agriType2 ? p.agriType1 + ' / ' + p.agriType2 : p.agriType1}</strong></div>
+                    <div class="bg-slate-50 p-3 rounded-lg sm:col-span-2"><span class="block text-xs text-slate-500 mb-1">Offres Ozaterra</span><strong class="text-slate-900">${p.hasNights?'Nuitées ':''}${p.hasNights && p.hasActivities?'& ':''}${p.hasActivities?'Activités':''} ${!p.hasNights && !p.hasActivities ? 'Aucune offre' : ''}</strong></div>
+                </div>
+                <div class="mt-4 bg-slate-50 p-3 rounded-lg">
+                    <span class="block text-xs text-slate-500 mb-2">Animaux sur la ferme</span>
+                    <p class="font-medium text-slate-900">${p.animals && p.animals.length > 0 ? p.animals.join(', ') : "Aucun animal référencé"}</p>
+                </div>
+            `;
+            document.getElementById('detail-modal').classList.remove('hidden');
+        }
+
+        function closeModal() { document.getElementById('detail-modal').classList.add('hidden'); }
+
+        function exportToCSV() {
+            if (partners.length === 0) return alert("Aucune donnée à exporter.");
+            let csv = "data:text/csv;charset=utf-8,Nom Exploitation;Nom Exploitant;Prenom Exploitant;Telephone;Ville;Departement;Region;Nuitees;Activites;Type Agriculture 1;Type Agriculture 2;Animaux\n";
+            partners.forEach(p => {
+                csv += `"${p.farmName}";"${p.operatorLastname}";"${p.operatorFirstname}";"${p.phone || ''}";"${p.city}";"${p.department}";"${p.region}";${p.hasNights?"Oui":"Non"};${p.hasActivities?"Oui":"Non"};"${p.agriType1}";"${p.agriType2||''}";"${(p.animals||[]).join(', ')}"\n`;
+            });
+            const link = document.createElement("a");
+            link.setAttribute("href", encodeURI(csv)); link.setAttribute("download", "ozaterra_export.csv");
+            document.body.appendChild(link); link.click(); link.remove();
+        }
+
+        function updateStats() {
+            ['chartAgri', 'chartServices', 'chartAnimals'].forEach(id => {
+                if (chartsInstance[id]) chartsInstance[id].destroy();
+            });
+
+            if (!mapInstance) {
+                mapInstance = L.map('map-france').setView([46.2276, 2.2137], 5);
+                L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+                    attribution: '&copy; OpenStreetMap contributors',
+                    maxZoom: 18
+                }).addTo(mapInstance);
+                markersLayer = L.layerGroup().addTo(mapInstance);
+            }
+            setTimeout(() => { mapInstance.invalidateSize(); }, 100);
+            markersLayer.clearLayers();
+
+            const ozaPin = L.divIcon({
+                className: 'custom-pin',
+                html: `<div style="background-color:#2C5E3B; width:16px; height:16px; border-radius:50%; border:2px solid white; box-shadow: 0 2px 5px rgba(0,0,0,0.4);"></div>`,
+                iconSize: [16, 16],
+                iconAnchor: [8, 8]
+            });
+
+            const filterAgri = document.getElementById('map-filter-agri').value;
+            const filterAnimal = document.getElementById('map-filter-animal').value;
+
+            const filteredPartners = partners.filter(p => {
+                let matchAgri = true;
+                let matchAnimal = true;
+                if (filterAgri !== "ALL") matchAgri = (p.agriType1 === filterAgri || p.agriType2 === filterAgri);
+                if (filterAnimal !== "ALL") matchAnimal = (p.animals && p.animals.includes(filterAnimal));
+                return matchAgri && matchAnimal;
+            });
+
+            let agri={}, anim={}, n=0, a=0, b=0;
+            
+            filteredPartners.forEach(p => {
+                agri[p.agriType1] = (agri[p.agriType1] || 0) + 1;
+                if(p.hasNights) n++; if(p.hasActivities) a++; if(p.hasNights && p.hasActivities) b++;
+                (p.animals||[]).forEach(an => anim[an] = (anim[an] || 0) + 1);
+
+                const addMarkerToMap = (lat, lng) => {
+                    const popupHTML = `
+                        <div style="font-family:'Inter', sans-serif; min-width: 150px;">
+                            <strong style="color:#2C5E3B; display:block; margin-bottom:2px; font-size:14px;">${p.farmName}</strong>
+                            <span style="color:#64748b; font-size:12px; display:block;">${p.city} (${p.department})</span>
+                            <span style="color:#475569; font-size:11px; margin-top:5px; display:block;"><i>${p.operatorFirstname} ${p.operatorLastname}</i></span>
+                        </div>
+                    `;
+                    L.marker([lat, lng], {icon: ozaPin}).bindPopup(popupHTML).addTo(markersLayer);
+                };
+
+                if (p.lat && p.lng) {
+                    addMarkerToMap(p.lat, p.lng);
+                } else if (p.city) {
+                    const cacheKey = p.city.toLowerCase();
+                    if (cityCache[cacheKey]) {
+                        addMarkerToMap(cityCache[cacheKey].lat, cityCache[cacheKey].lng);
+                    } else {
+                        fetch(`https://nominatim.openstreetmap.org/search?format=json&country=France&city=${encodeURIComponent(p.city)}`)
+                            .then(res => res.json())
+                            .then(data => {
+                                if (data && data.length > 0) {
+                                    const lat = parseFloat(data[0].lat);
+                                    const lng = parseFloat(data[0].lon);
+                                    cityCache[cacheKey] = {lat, lng};
+                                    addMarkerToMap(lat, lng);
+                                }
+                            }).catch(e => console.error("Ville introuvable", e));
+                    }
+                }
+            });
+
+            const colors = {
+                green: '#2C5E3B', greenLight: '#458B59', greenLighter: '#6C9F7D', 
+                terra: '#D46F4D', terraLight: '#E28C6F', grey: '#cbd5e1'
+            };
+
+            const drawChart = (id, type, labels, data, bgColors) => {
+                chartsInstance[id] = new Chart(document.getElementById(id), {
+                    type: type, data: { labels: labels, datasets: [{ data: data, backgroundColor: bgColors, borderWidth: 0 }] },
+                    options: { responsive: true, maintainAspectRatio: false, plugins: { legend: { position: type==='pie'||type==='doughnut' ? 'right' : 'top' } } }
+                });
+            };
+
+            drawChart('chartAgri', 'bar', Object.keys(agri), Object.values(agri), colors.greenLight);
+            drawChart('chartServices', 'bar', ['Nuitées', 'Activités', 'Les deux'], [n, a, b], [colors.terraLight, colors.greenLight, colors.terra]);
+            
+            let topAnim = Object.entries(anim).sort((x,y)=>y[1]-x[1]).slice(0,5);
+            drawChart('chartAnimals', 'pie', topAnim.map(x=>x[0]), topAnim.map(x=>x[1]), [colors.green, colors.terra, colors.greenLight, colors.terraLight, colors.greenLighter]);
+        }
+    </script>
+</body>
+</html>
