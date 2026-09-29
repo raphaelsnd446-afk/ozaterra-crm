@@ -103,7 +103,7 @@
             <div class="max-w-7xl mx-auto flex space-x-8 px-4 sm:px-6">
                 <button onclick="switchTab('form')" id="btn-form" class="tab-btn py-4 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2 border-oza-green text-oza-green transition-colors">
                     <i class="fa-solid fa-user-plus"></i>
-                    <span>Ajouter un partenaire</span>
+                    <span>Ajouter / Modifier un partenaire</span>
                 </button>
                 <button onclick="switchTab('directory')" id="btn-directory" class="tab-btn py-4 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors">
                     <i class="fa-solid fa-address-book"></i>
@@ -120,12 +120,20 @@
             <!-- ONGLET 1 : FORMULAIRE -->
             <section id="tab-form" class="tab-content">
                 <div class="bg-white rounded-2xl shadow-[0_2px_15px_-3px_rgba(0,0,0,0.07)] border border-slate-100 p-6 sm:p-10 max-w-4xl mx-auto">
-                    <div class="mb-8 border-b border-slate-100 pb-5">
-                        <h2 class="text-2xl font-display font-bold text-slate-900">Nouvelle Fiche Agriculteur</h2>
-                        <p class="text-sm text-slate-500 mt-1">Saisissez les détails de l'exploitation pour l'ajouter au réseau Ozaterra.</p>
+                    <div class="mb-8 border-b border-slate-100 pb-5 flex justify-between items-center">
+                        <div>
+                            <h2 id="form-title" class="text-2xl font-display font-bold text-slate-900">Nouvelle Fiche Agriculteur</h2>
+                            <p id="form-subtitle" class="text-sm text-slate-500 mt-1">Saisissez les détails de l'exploitation pour l'ajouter au réseau Ozaterra.</p>
+                        </div>
+                        <div id="cancel-edit-container" class="hidden">
+                            <button type="button" onclick="resetFormToCreateMode()" class="text-xs bg-slate-100 hover:bg-slate-200 text-slate-600 px-3 py-1.5 rounded-lg transition font-medium">
+                                <i class="fa-solid fa-xmark mr-1"></i> Annuler la modification
+                            </button>
+                        </div>
                     </div>
 
                     <form id="partner-form" onsubmit="savePartner(event)" class="space-y-8">
+                        <input type="hidden" id="editing-partner-id" value="">
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
                             <div>
                                 <label class="block text-sm font-semibold text-slate-700 mb-1.5">Nom de l'exploitation *</label>
@@ -210,7 +218,7 @@
                         <div class="pt-6 flex justify-end">
                             <button type="submit" id="btn-submit-form" class="bg-oza-green hover:bg-oza-green-light text-white font-semibold px-8 py-3 rounded-xl shadow-md shadow-oza-green/20 transition-all flex items-center space-x-2">
                                 <i class="fa-solid fa-check"></i>
-                                <span>Ajouter au répertoire</span>
+                                <span id="btn-submit-text">Ajouter au répertoire</span>
                             </button>
                         </div>
                     </form>
@@ -418,12 +426,14 @@
             for (let region in regionsData) select.innerHTML += `<option value="${region}">${region}</option>`;
         }
 
-        function updateDepartments() {
+        function updateDepartments(selectedDept = "") {
             const region = document.getElementById('region-select').value;
             const deptSelect = document.getElementById('department-select');
             deptSelect.innerHTML = '<option value="">Département</option>';
             if (region && regionsData[region]) {
-                regionsData[region].forEach(dept => deptSelect.innerHTML += `<option value="${dept}">${dept}</option>`);
+                regionsData[region].forEach(dept => {
+                    deptSelect.innerHTML += `<option value="${dept}" ${dept === selectedDept ? 'selected' : ''}>${dept}</option>`;
+                });
             }
         }
 
@@ -482,11 +492,12 @@
             e.preventDefault();
             const btn = document.getElementById('btn-submit-form');
             const originalBtnHtml = btn.innerHTML;
-            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span> Localisation...</span>';
+            btn.innerHTML = '<i class="fa-solid fa-spinner fa-spin"></i><span> Enregistrement...</span>';
             btn.disabled = true;
 
             const city = document.getElementById('operator-city').value.trim();
             const selectedAnimals = Array.from(document.querySelectorAll('.animal-checkbox:checked')).map(cb => cb.value);
+            const editingId = document.getElementById('editing-partner-id').value;
 
             fetch(`https://nominatim.openstreetmap.org/search?format=json&country=France&city=${encodeURIComponent(city)}`)
                 .then(response => response.json())
@@ -511,15 +522,18 @@
                         agriType1: document.getElementById('agri-type-1').value,
                         agriType2: document.getElementById('agri-type-2').value || null,
                         lat: lat, 
-                        lng: lng, 
-                        createdAt: firebase.firestore.FieldValue.serverTimestamp()
+                        lng: lng
                     };
 
-                    return db.collection("partners").add(partnerData);
+                    if (editingId) {
+                        return db.collection("partners").doc(editingId).update(partnerData);
+                    } else {
+                        partnerData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+                        return db.collection("partners").add(partnerData);
+                    }
                 })
                 .then(() => {
-                    document.getElementById('partner-form').reset();
-                    document.getElementById('department-select').innerHTML = '<option value="">Département</option>';
+                    resetFormToCreateMode();
                     switchTab('directory');
                 })
                 .catch(error => alert("Erreur d'enregistrement : " + error.message))
@@ -527,6 +541,47 @@
                     btn.innerHTML = originalBtnHtml;
                     btn.disabled = false;
                 });
+        }
+
+        function editPartner(id) {
+            const p = partners.find(item => item.firebaseId === id);
+            if (!p) return;
+
+            document.getElementById('editing-partner-id').value = p.firebaseId;
+            document.getElementById('farm-name').value = p.farmName || '';
+            document.getElementById('operator-phone').value = p.phone || '';
+            document.getElementById('operator-lastname').value = p.operatorLastname || '';
+            document.getElementById('operator-firstname').value = p.operatorFirstname || '';
+            document.getElementById('operator-city').value = p.city || '';
+            document.getElementById('region-select').value = p.region || '';
+            updateDepartments(p.department || '');
+            
+            document.getElementById('has-nights').checked = !!p.hasNights;
+            document.getElementById('has-activities').checked = !!p.hasActivities;
+
+            document.querySelectorAll('.animal-checkbox').forEach(cb => {
+                cb.checked = p.animals && p.animals.includes(cb.value);
+            });
+
+            document.getElementById('agri-type-1').value = p.agriType1 || '';
+            document.getElementById('agri-type-2').value = p.agriType2 || '';
+
+            document.getElementById('form-title').textContent = "Modifier la fiche de " + p.farmName;
+            document.getElementById('form-subtitle').textContent = "Modifiez les informations et validez pour mettre à jour.";
+            document.getElementById('btn-submit-text').textContent = "Mettre à jour la fiche";
+            document.getElementById('cancel-edit-container').classList.remove('hidden');
+
+            switchTab('form');
+        }
+
+        function resetFormToCreateMode() {
+            document.getElementById('partner-form').reset();
+            document.getElementById('editing-partner-id').value = '';
+            document.getElementById('department-select').innerHTML = '<option value="">Sélectionnez la région d\'abord</option>';
+            document.getElementById('form-title').textContent = "Nouvelle Fiche Agriculteur";
+            document.getElementById('form-subtitle').textContent = "Saisissez les détails de l'exploitation pour l'ajouter au réseau Ozaterra.";
+            document.getElementById('btn-submit-text').textContent = "Ajouter au répertoire";
+            document.getElementById('cancel-edit-container').classList.add('hidden');
         }
 
         function deletePartner(firebaseId) {
@@ -562,8 +617,9 @@
                             <td class="p-4 text-slate-500">${p.city} <span class="text-xs">(${p.department})</span></td>
                             <td class="p-4"><div class="flex flex-wrap gap-1.5">${services.length ? services.join('') : '-'}</div></td>
                             <td class="p-4 text-xs font-medium text-slate-600">${agriStr}</td>
-                            <td class="p-4 text-center space-x-3 opacity-0 group-hover:opacity-100 transition-opacity">
+                            <td class="p-4 text-center space-x-2.5 opacity-0 group-hover:opacity-100 transition-opacity">
                                 <button onclick="viewDetails('${p.firebaseId}')" class="text-slate-400 hover:text-oza-green transition" title="Voir les détails"><i class="fa-solid fa-eye"></i></button>
+                                <button onclick="editPartner('${p.firebaseId}')" class="text-slate-400 hover:text-sky-600 transition" title="Modifier la fiche"><i class="fa-solid fa-pen-to-square"></i></button>
                                 <button onclick="deletePartner('${p.firebaseId}')" class="text-slate-400 hover:text-red-500 transition" title="Supprimer"><i class="fa-solid fa-trash"></i></button>
                             </td>
                         </tr>`;
