@@ -101,9 +101,9 @@
 
         <nav class="bg-white border-b border-slate-200 shadow-sm relative z-30">
             <div class="max-w-7xl mx-auto flex space-x-8 px-4 sm:px-6">
-                <button onclick="switchTab('form')" id="btn-form" class="tab-btn py-4 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2 border-oza-green text-oza-green transition-colors">
+                <button onclick="switchTab('form'); resetFormToCreateMode();" id="btn-form" class="tab-btn py-4 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2 border-oza-green text-oza-green transition-colors">
                     <i class="fa-solid fa-user-plus"></i>
-                    <span>Ajouter / Modifier un partenaire</span>
+                    <span>Ajouter un partenaire</span>
                 </button>
                 <button onclick="switchTab('directory')" id="btn-directory" class="tab-btn py-4 px-1 border-b-2 font-semibold text-sm flex items-center space-x-2 border-transparent text-slate-500 hover:text-slate-800 transition-colors">
                     <i class="fa-solid fa-address-book"></i>
@@ -525,7 +525,7 @@
                         lng: lng
                     };
 
-                    if (editingId) {
+                    if (editingId && editingId !== "") {
                         return db.collection("partners").doc(editingId).update(partnerData);
                     } else {
                         partnerData.createdAt = firebase.firestore.FieldValue.serverTimestamp();
@@ -575,7 +575,8 @@
         }
 
         function resetFormToCreateMode() {
-            document.getElementById('partner-form').reset();
+            const form = document.getElementById('partner-form');
+            if(form) form.reset();
             document.getElementById('editing-partner-id').value = '';
             document.getElementById('department-select').innerHTML = '<option value="">Sélectionnez la région d\'abord</option>';
             document.getElementById('form-title').textContent = "Nouvelle Fiche Agriculteur";
